@@ -1,0 +1,221 @@
+#install.packages("e1071")
+library(caret)
+library(caTools)
+library(ggplot2)
+
+#DOWNLOADING NEWS data
+#FACEBOOK
+
+# Let's set some parameters
+term <- "facebook" # Need to use + to string together separate words
+# begin_date <- "20180101"
+# end_date <- "20190505"
+begin_date <- "20190102"
+end_date <- "20190601"
+baseurl <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",term,
+                  "&begin_date=",begin_date,"&end_date=",end_date,
+                  "&facet_filter=true&api-key=",NYTIMES_KEY, sep="")
+
+initialQuery <- fromJSON(baseurl)
+maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1) 
+pages <- list()
+for(i in 0:maxPages){
+  nytSearch <- fromJSON(paste0(baseurl, "&page=", i), flatten = TRUE) %>% data.frame() 
+  message("Retrieving page ", i)
+  pages[[i+1]] <- nytSearch 
+  Sys.sleep(1) 
+}
+
+
+allNYTSearch2019 <- rbind_pages(pages)
+
+
+facebook=rbind(allNYTSearch2019,allNYTSearch2018,allNYTSearch2017)
+
+
+#MICROSOFT
+
+# Let's set some parameters
+term <- "microsoft" # Need to use + to string together separate words
+# begin_date <- "20180101"
+# end_date <- "20190505"
+begin_date <- "20170101"
+end_date <- "20170601"
+baseurl <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",term,
+                  "&begin_date=",begin_date,"&end_date=",end_date,
+                  "&facet_filter=true&api-key=",NYTIMES_KEY, sep="")
+
+initialQuery <- fromJSON(baseurl)
+maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1) 
+pages <- list()
+for(i in 0:maxPages){
+  nytSearch <- fromJSON(paste0(baseurl, "&page=", i), flatten = TRUE) %>% data.frame() 
+  message("Retrieving page ", i)
+  pages[[i+1]] <- nytSearch 
+  Sys.sleep(1) 
+}
+
+
+allNYTSearch2017_microsoft <- rbind_pages(pages)
+
+# Let's set some parameters
+term <- "microsoft" # Need to use + to string together separate words
+# begin_date <- "20180101"
+# end_date <- "20190505"
+begin_date <- "20180602"
+end_date <- "20190101"
+baseurl <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",term,
+                  "&begin_date=",begin_date,"&end_date=",end_date,
+                  "&facet_filter=true&api-key=",NYTIMES_KEY, sep="")
+
+initialQuery <- fromJSON(baseurl)
+maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1) 
+pages <- list()
+for(i in 0:maxPages){
+  nytSearch <- fromJSON(paste0(baseurl, "&page=", i), flatten = TRUE) %>% data.frame() 
+  message("Retrieving page ", i)
+  pages[[i+1]] <- nytSearch 
+  Sys.sleep(1) 
+}
+
+
+allNYTSearch2018_microsoft <- rbind_pages(pages)
+
+
+# Let's set some parameters
+term <- "microsoft" # Need to use + to string together separate words
+# begin_date <- "20180101"
+# end_date <- "20190505"
+begin_date <- "20190102"
+end_date <- "20190601"
+baseurl <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",term,
+                  "&begin_date=",begin_date,"&end_date=",end_date,
+                  "&facet_filter=true&api-key=",NYTIMES_KEY, sep="")
+
+initialQuery <- fromJSON(baseurl)
+maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1) 
+pages <- list()
+for(i in 0:maxPages){
+  nytSearch <- fromJSON(paste0(baseurl, "&page=", i), flatten = TRUE) %>% data.frame() 
+  message("Retrieving page ", i)
+  pages[[i+1]] <- nytSearch 
+  Sys.sleep(1) 
+}
+
+allNYTSearch2019_microsoft <- rbind_pages(pages)
+
+microsoft=rbind(allNYTSearch2018_microsoft,allNYTSearch2017_microsoft,allNYTSearch2018_microsoft)
+microsoft_analysis= microsoft_all %>% select(response.docs.pub_date,response.docs.abstract,response.docs.word_count,response.docs.headline.main)
+microsoft_analysis=data.frame(microsoft_analysis)
+microsoft_analysis$response.docs.pub_date=substr(microsoft_analysis$response.docs.pub_date, 0, 10)
+
+
+
+facebook_all=data.frame(facebook)
+facebook_analysis= facebook_all %>% select(response.docs.pub_date,response.docs.abstract,response.docs.word_count,response.docs.headline.main)
+facebook_analysis=data.frame(facebook_analysis)
+facebook_analysis$response.docs.pub_date=substr(facebook_analysis$response.docs.pub_date, 0, 10)
+
+#FORMATING DATA
+facebook_analysis <- as_tibble(facebook_analysis)
+microsoft_analysis <- as_tibble(microsoft_analysis)
+
+#Applying sentiment alghoritm for Facebook
+
+facebok_sentiment= analyzeSentiment(facebook_analysis$response.docs.abstract, language = "english",
+                                    aggregate = NULL,
+                                    removeStopwords = TRUE, stemming = TRUE)
+
+
+
+#Applying sentiment alghoritm for Microsoft
+
+microsoft_analysis= analyzeSentiment(microsoft_analysis$response.docs.abstract, language = "english",
+                                    aggregate = NULL,
+                                    removeStopwords = TRUE, stemming = TRUE)
+
+
+#write the data to CSV file for appending stock prices and formating
+write.csv(microsoft_analysis,"sentiment microsoft.csv")
+write.csv(facebook_analysis,"sentiment facebook.csv")
+
+
+#read the final CSV file
+microsoft_final=read.csv(file="microsoft by week.csv",header=TRUE, sep=";")
+
+split = sample.split(microsoft_final$Stockprice, SplitRatio = 2/3)
+training_set = microsoft_final
+
+
+
+#Liniar model
+# Fitting Simple Linear Regression to the Training set
+regressor = lm(formula = as.numeric(Stockprice) ~ as.numeric(SentimentLM),
+               data = training_set)
+
+# Predicting a new result
+y_predtraining = predict(regressor, training_set)
+
+
+
+#plot data
+points(as.numeric(training_set$Stockprice),as.numeric(y_predtraining), col = "red", pch=4)
+#RMSE
+error <- as.numeric(training_set$Stockprice) - as.numeric(y_predtraining)
+svrPredictionRMSE_training <- rmse(error)  # 3.157061
+
+
+
+# # Visualising the Training set results
+
+a=training_set$Stockprice
+c=training_set$SentimentLM
+b=y_predtraining
+a=data.frame(a)
+b=data.frame(b)
+c=data.frame(c)
+library(ggplot2)
+ggplot() +
+ geom_point(aes(x = c[[1]], y = a[[1]]),
+           colour = 'red') +
+geom_line(aes(x = c[[1]], y = b[[1]]),
+           colour = 'blue') +
+  ggtitle('Stockprice vs Sentimentlm (Training set)') +
+  xlab('Sentimentlm') +
+  ylab('Stockprice')
+
+
+
+#SVN Model
+
+regressor_svm = svm(formula = as.numeric(Stockprice) ~ as.numeric(SentimentLM),
+                data = training_set
+              )
+
+
+# Predicting a new result
+y_predtraining_svm = predict(regressor_svm, training_set,interval="prediction")
+
+
+y_predtraining_svm=data.frame(y_predtraining_svm)
+
+a=training_set$Stockprice
+c=training_set$SentimentLM
+b=y_predtraining_svm
+a=data.frame(a)
+b=data.frame(b)
+c=data.frame(c)
+
+#RMSE
+error <- as.numeric(training_set$Stockprice) - as.numeric(y_predtraining_svm)
+svrPredictionRMSE_trainingsvm <- rmse(error)  # 3.157061
+
+
+ggplot() +
+  geom_point(aes(x = c[[1]], y = a[[1]]),
+             colour = 'red') +
+  geom_line(aes(x = c[[1]], y = b[[1]]),
+            colour = 'blue') +
+  ggtitle('Stockprice vs Sentimentlm (Training set)') +
+  xlab('Sentimentlm') +
+  ylab('Stockprice')
